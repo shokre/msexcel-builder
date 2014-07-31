@@ -156,6 +156,8 @@ class Sheet
 
   set: (col, row, str) ->
     @data[row][col].v = @book.ss.str2id(''+str) if str? and str isnt ''
+  val: (col, row, val) ->
+    @data[row][col].val = val
 
   merge: (from_cell, to_cell) ->
     @merges.push({from:from_cell, to:to_cell})
@@ -220,9 +222,13 @@ class Sheet
         if (ix.v isnt 0) or (sid isnt 1)
           c = r.ele('c',{r:''+tool.i2a(j)+i})
           c.att('s',''+(sid-1)) if sid isnt 1
-          if ix.v isnt 0
-            c.att('t','s')
-            c.ele('v',''+(ix.v-1))
+          if ix.val
+            c.att('t', 'n')
+            c.ele('v', ''+ix.val)
+          else
+            if ix.v isnt 0
+              c.att('t','s')
+              c.ele('v',''+(ix.v-1))
     if @merges.length > 0
       mc = ws.ele('mergeCells',{count:@merges.length})
       for m in @merges
