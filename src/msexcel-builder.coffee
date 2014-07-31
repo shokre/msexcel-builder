@@ -4,19 +4,34 @@
   History: 2012/11/07 first created
 ###
 
-fs  = require 'fs'
+fs  = require 'fs-extra'
+async  = require 'async'
 path = require 'path'
 exec = require 'child_process'
 xml = require 'xmlbuilder'
+EasyZip = require('easy-zip').EasyZip
 existsSync = fs.existsSync || path.existsSync
 
 tool = 
   i2a : (i) ->
-    return 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.charAt(i-1)
+    alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+    len = alphabet.length
+
+    getCellAdr = (num) ->
+      pos = num % len
+      tmp = Math.floor(num / len)
+      pos = len if pos == 0
+
+      tmp = tmp - 1 if tmp > 0 && num % len == 0
+      output = alphabet.charAt(pos - 1)
+      if tmp > 0
+        output = getCellAddr(tmp) + output
+      output
+    getCellAdr i
 
   copy : (origin, target) ->
   	if existsSync(origin)
-      fs.mkdirSync(target, 0755) if not existsSync(target)
+      fs.mkdirSync(target, 0o755) if not existsSync(target)
       files = fs.readdirSync(origin)
       if files
         for f in files
@@ -363,33 +378,37 @@ class Workbook
     return sheet
 
   save: (cb) =>
-    target = @fpath + '\\' + @id
-    # 1 - build [Content_Types].xml
-    fs.writeFileSync(target+'\\[Content_Types].xml',@ct.toxml(),'utf8')
-    # 2 - build docProps/app.xml
-    fs.writeFileSync(target+'\\docProps\\app.xml',@da.toxml(),'utf8')
-    # 3 - build xl/workbook.xml
-    fs.writeFileSync(target+'\\xl\\workbook.xml',@wb.toxml(),'utf8')
-    # 4 - build xl/sharedStrings.xml
-    fs.writeFileSync(target+'\\xl\\sharedStrings.xml',@ss.toxml(),'utf8')
-    # 5 - build xl/_rels/workbook.xml.rels
-    fs.writeFileSync(target+'\\xl\\_rels\\workbook.xml.rels',@re.toxml(),'utf8')
-    # 6 - build xl/worksheets/sheet(1-N).xml
-    for i in [0...@sheets.length]
-      fs.writeFileSync(target+'\\xl\\worksheets\\sheet'+(i+1)+'.xml',@sheets[i].toxml(),'utf8')
-    # 7 - build xl/styles.xml
-    fs.writeFileSync(target+'\\xl\\styles.xml',@st.toxml(),'utf8')    
-    # 8 - compress temp folder to target file
-    args = ' a -tzip "' + @fpath + '\\' + @fname + '" "*"'
-    opts = {cwd:target}
-    exec.exec '"'+opt.tmpl_path+'\\tool\\7za.exe"' + args, opts, (err,stdout,stderr)->
-      # 9 - delete temp folder
-      exec.exec 'rmdir "' + target + '" /q /s',()->
-        cb not err
+    target = path.join @fpath, @id
+    sheetList = []
+
+    for sheet, i in @sheets
+      sheetList.push {name: target + '/xl/worksheets/sheet' + (i + 1) + '.xml', data: sheet.toxml()}
+
+    self = @
+    async.series([
+      async.apply(fs.copy, opt.tmpl_path + '/tmpl', target),
+      async.apply(fs.mkdir, target + '/xl/_rels'),
+      async.apply(fs.mkdir, target + '/xl/worksheets'),
+      async.apply(fs.writeFile, target + '/[Content_Types].xml', self.ct.toxml()),
+      async.apply(fs.writeFile, target + '/docProps/app.xml', self.da.toxml()),
+      async.apply(fs.writeFile, target + '/xl/workbook.xml', self.wb.toxml()),
+      async.apply(fs.writeFile, target + '/xl/sharedStrings.xml', self.ss.toxml()),
+      async.apply(fs.writeFile, target + '/xl/_rels/workbook.xml.rels', self.re.toxml()),
+      async.apply(fs.writeFile, target + '/xl/styles.xml', self.st.toxml()),
+      (cb) -> async.forEach(sheetList,
+        (sheet, sheetDone) -> fs.writeFile(sheet.name, sheet.data, sheetDone)
+        (err) -> cb(err))
+    ], (err) ->
+      return cb err if err
+      zip = new EasyZip();
+      zip.zipFolder target + '/.', ->
+        zip.writeToFile path.join(self.fpath, self.fname)
+        fs.remove(target, -> cb(null, path.join(self.fpath, self.fname)))
+    )
 
   cancel: () ->
     # delete temp folder
-    fs.rmdirSync target
+    fs.remove(path.join(this.fpath, this.id));
 
 module.exports = 
   createWorkbook: (fpath, fname)->
