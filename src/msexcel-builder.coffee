@@ -187,9 +187,12 @@ class Sheet
   wrap: (col, row, wrap_s)->
     @styles['wrap_'+col+'_'+row] = wrap_s
 
+  numFmt: (col, row, formatCode)->
+    @styles['numfmt_' + col + '_' + row] = @book.st.numfmt2id(formatCode)
+
   style_id: (col, row) ->
     inx = '_'+col+'_'+row
-    style = {font_id:@styles['font'+inx],fill_id:@styles['fill'+inx],bder_id:@styles['bder'+inx],align:@styles['algn'+inx],valign:@styles['valgn'+inx],rotate:@styles['rotate'+inx],wrap:@styles['wrap'+inx]}
+    style = {font_id:@styles['font'+inx],fill_id:@styles['fill'+inx],bder_id:@styles['bder'+inx],align:@styles['algn'+inx],valign:@styles['valgn'+inx],rotate:@styles['rotate'+inx],wrap:@styles['wrap'+inx],numfmt: @styles['numfmt' + inx]}
     id = @book.st.style2id(style)
     return id
 
@@ -236,6 +239,7 @@ class Style
     @mfills = []  # fill style
     @mbders = []  # border style
     @mstyle = []  # cell style<ref-font,ref-fill,ref-border,align>
+    @numFmts = [] # number formats
     @with_default()
 
   with_default:()->
@@ -303,7 +307,8 @@ class Style
     style.font_id or= @def_font_id
     style.fill_id or= @def_fill_id
     style.bder_id or= @def_bder_id
-    k = 's_' + style.font_id + '_' + style.fill_id + '_' + style.bder_id + '_' + style.align + '_' + style.valign + '_' + style.wrap + '_' + style.rotate
+    style.numfmt or= '0'
+    k = 's_' + style.font_id + '_' + style.fill_id + '_' + style.bder_id + '_' + style.align + '_' + style.valign + '_' + style.wrap + '_' + style.rotate + '_' + style.numfmt
     id = @cache[k]
     if id
       return id
@@ -312,9 +317,24 @@ class Style
       @cache[k] = @mstyle.length
       return @mstyle.length
 
+  numfmt2id: (formatCode)->
+    fmt = {numFmtId: '' , formatCode: formatCode}
+    k = 'nfmt_' + fmt.formatCode
+    id = @cache[k]
+    if id
+      return id
+    else
+      @numFmts.push fmt
+      fmt.numFmtId = @cache[k] = @numFmts.length+200
+      return fmt.numFmtId
+
   toxml: ()->
     ss = xml.create('styleSheet',{version:'1.0',encoding:'UTF-8',standalone:true})
     ss.att('xmlns','http://schemas.openxmlformats.org/spreadsheetml/2006/main')
+    numfs = ss.ele('numFmts', {count: @numFmts.length})
+    for o in @numFmts
+      e = numfs.ele('numFmt', o)
+
     fonts = ss.ele('fonts',{count:@mfonts.length})
     for o in @mfonts
       e = fonts.ele('font')
@@ -343,7 +363,7 @@ class Style
     ss.ele('cellStyleXfs',{count:'1'}).ele('xf',{numFmtId:'0',fontId:'0',fillId:'0',borderId:'0'}).ele('alignment',{vertical:'center'})
     cs = ss.ele('cellXfs',{count:@mstyle.length})
     for o in @mstyle
-      e = cs.ele('xf',{numFmtId:'0',fontId:(o.font_id-1),fillId:(o.fill_id-1),borderId:(o.bder_id-1),xfId:'0'})
+      e = cs.ele('xf',{numFmtId: o.numfmt || '0',fontId:(o.font_id-1),fillId:(o.fill_id-1),borderId:(o.bder_id-1),xfId:'0'})
       e.att('applyFont','1') if o.font_id isnt 1
       e.att('applyFill','1') if o.fill_id isnt 1
       e.att('applyBorder','1') if o.bder_id isnt 1
