@@ -281,7 +281,9 @@ class Style
     fill.type or= 'none'
     fill.bgColor or= '-'
     fill.fgColor or= '-'
-    k = 'fill_' + fill.type + fill.bgColor + fill.fgColor
+    fill.bgRGB or= '-'
+    fill.fgRGB or= '-'
+    k = ['fill', fill.type, fill.bgColor, fill.fgColor, fill.bgRGB, fill.fgRGB].join('_')
     id = @cache[k]
     if id
       return id
@@ -357,7 +359,10 @@ class Style
       e = fills.ele('fill')
       es = e.ele('patternFill',{patternType:o.type})
       es.ele('fgColor',{theme:'8',tint:'0.79998168889431442'}) if o.fgColor isnt '-'
+      es.ele('fgColor',{rgb:o.fgRGB}) if o.fgRGB isnt '-'
       es.ele('bgColor',{indexed:o.bgColor}) if o.bgColor isnt '-'
+      es.ele('bgColor',{rgb:o.bgRGB}) if o.bgRGB isnt '-'
+
     bders = ss.ele('borders',{count:@mbders.length})
     for o in @mbders
       e = bders.ele('border')
